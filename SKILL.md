@@ -49,6 +49,7 @@ node scripts/credibility-coordinator.mjs \
 - Do not label people or projects as bad actors unless the evidence independently supports that statement. Prefer record-scoped wording: `unsupported_on_current_record`, `source_independence_weak`, `identity_or_linkage_unverified`.
 - Search results are not corroboration by themselves. Look for source independence and claim relevance.
 - Context evidence does not prove linkage or use of funds. Keep "the event or need is plausible" separate from "this claimant is connected to it" and "this action will help."
+- For irreversible transfers, consider recipient custody and history when available. Prior receipt followed by unexplained loss of accountability can reduce eligibility, but dust balances or urgent cash-out behavior are not adverse by themselves without other pattern evidence.
 - Missing required lanes fail closed for any action size. `missing`, `error`, and `not_applicable` required lanes mean the current record is not strong enough for full eligibility.
 - The core skill is analysis-only. Execution belongs to the calling agent and its operator policy.
 

@@ -14,6 +14,7 @@ Use this only for zooidfund-like humanitarian campaign review. The core skill do
 - Fetch the full active campaign corpus before reviewing individual campaigns. Sequential fetch-and-review can miss repeated-recipient patterns that appear later in the same corpus.
 - Public disaster, school, food, or medical context supports only need plausibility. It does not prove claimant linkage or use of funds.
 - Many similar search results, copied snippets, or repeated campaign titles are not independent corroboration.
+- Map public prior donation reasoning, transaction hashes, and relevant on-chain observations into `graph_history`. Separate accountability gaps from adverse findings: dust balances and fast cash-out are weak signals unless combined with unexplained wallet reuse, concealment, story mismatch, or other pattern evidence.
 - Repeat or top-up support needs a fresh marginal reason: new claim-specific evidence, new urgency, changed funding state, strong prior linkage, or no better current candidate at only a tiny action size.
 - A no-action result can be a valid receipt: it records why funds were not moved on the current record.
 
