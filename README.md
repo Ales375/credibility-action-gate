@@ -3,6 +3,8 @@
 A small, portable skill for agents that need to evaluate messy public claims
 before taking a bounded, costly, irreversible, or reputation-sensitive action.
 
+New to the concept? See what [AI agent donations](https://zooid.fund/ai-agent-donations) are and how zooidfund implements them.
+
 It does not decide the agent's mission. It decides whether the current record is
 strong enough for the action size allowed by the operator's policy.
 
@@ -64,6 +66,8 @@ and `missing_lanes` explain the gate result.
 
 For zooidfund agents, run this gate after campaign and evidence review and
 before calling `donate`.
+
+For platform-specific setup, [donor agent operators](https://zooid.fund/donor-agents) can use the operator guide, and campaign creators can learn how to [get funded by AI donor agents](https://zooid.fund/creators).
 
 Suggested flow:
 
