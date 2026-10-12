@@ -228,4 +228,72 @@ test("lane details preserve unknown fields", () => {
   assert.equal(detail.reviewer_note, "kept");
 });
 
+test("empty required reviews do not permit action", () => {
+  const result = runCase({ policy: basePolicy(), lanes: { evidence: {}, external_context: {}, graph_history: cleanGraph } });
+  assert.equal(result.maximum_recommended_size, 0);
+  assert.deepEqual(result.missing_lanes, ["evidence", "external_context"]);
+});
+
+for (const support of [undefined, "not_applicable", "weak", "none"]) {
+  test(`repeat support ${support} does not permit action`, () => {
+    const evidence = structuredClone(cleanEvidence);
+    if (support === undefined) delete evidence.decision.repeat_or_top_up_support;
+    else evidence.decision.repeat_or_top_up_support = support;
+    const result = runCase({ policy: basePolicy({ requested_action: { size: 5, is_repeat_action: true } }),
+      lanes: { evidence, external_context: cleanExternal, graph_history: cleanGraph } });
+    assert.equal(result.maximum_recommended_size, 0);
+    assert(result.reasons.some(reason => reason.code === "REPEAT_ACTION_WITHOUT_FRESH_REASON"));
+  });
+}
+
+for (const lane of [null, [], { status: "completed" }, { status: "completed", findings: [], decision: {} },
+  { ...cleanEvidence, findings: "none" }, { ...cleanEvidence, decision: [] },
+  { ...cleanEvidence, findings: [{ severity: "HIGH " }] }]) {
+  test(`malformed review rejected: ${JSON.stringify(lane)}`, () => {
+    runCaseExpectError({ policy: basePolicy(), lanes: { evidence: lane, external_context: cleanExternal } });
+  });
+}
+for (const field of Object.keys(cleanEvidence.decision)) {
+  test(`invalid ${field} rejected`, () => {
+    runCaseExpectError({ policy: basePolicy(), lanes: { evidence: {
+      ...cleanEvidence, decision: { ...cleanEvidence.decision, [field]: "invalid" } } } });
+  });
+}
+for (const field of Object.keys(cleanExternal.decision)) {
+  test(`invalid ${field} rejected`, () => {
+    runCaseExpectError({ policy: basePolicy(), lanes: { external_context: {
+      ...cleanExternal, decision: { ...cleanExternal.decision, [field]: "invalid" } } } });
+  });
+}
+test("explicit fresh repeat reason permits action", () => {
+  const evidence = { ...cleanEvidence, decision: { ...cleanEvidence.decision, repeat_or_top_up_support: "fresh_reason_present" } };
+  const result = runCase({ policy: basePolicy({ requested_action: { size: 5, is_repeat_action: true } }),
+    lanes: { evidence, external_context: cleanExternal, graph_history: cleanGraph } });
+  assert.equal(result.maximum_recommended_size, 5);
+});
+test("required error lane stays zero", () => {
+  const result = runCase({ policy: basePolicy(), lanes: { evidence: cleanEvidence, external_context: { status: "error" }, graph_history: cleanGraph } });
+  assert.equal(result.maximum_recommended_size, 0);
+});
+test("contradicted linkage rejects despite positive context", () => {
+  const evidence = { ...cleanEvidence, decision: { ...cleanEvidence.decision, claimant_linkage: "contradicted" } };
+  const result = runCase({ policy: basePolicy(), lanes: { evidence, external_context: cleanExternal, graph_history: cleanGraph } });
+  assert.equal(result.disposition, "reject_current_record");
+  assert.equal(result.maximum_recommended_size, 0);
+});
+for (const code of ["FAST_OUTFLOW_ONLY", "WEBSITE_INACCESSIBLE", "PRIVACY_REDACTIONS", "NEVER_FUNDED_NO_OUTCOMES"]) {
+  test(`${code} alone does not deny supported action`, () => {
+    const evidence = { ...cleanEvidence, findings: [{ code, severity: "info", summary: "No independent adverse evidence." }] };
+    const result = runCase({ policy: basePolicy(), lanes: { evidence, external_context: cleanExternal, graph_history: cleanGraph } });
+    assert.equal(result.maximum_recommended_size, 5);
+  });
+}
+test("operator required linkage review cannot be replaced by positive context", () => {
+  const result = runCase({ policy: basePolicy({ required_lanes: ["evidence", "external_context", "recipient_linkage"] }),
+    lanes: { evidence: cleanEvidence, external_context: cleanExternal, graph_history: cleanGraph,
+      recipient_linkage: { status: "missing" } } });
+  assert.equal(result.maximum_recommended_size, 0);
+  assert(result.missing_lanes.includes("recipient_linkage"));
+});
+
 if (process.exitCode) process.exit(process.exitCode);

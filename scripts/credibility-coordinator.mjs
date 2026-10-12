@@ -154,13 +154,54 @@ function normalizeFinding(finding) {
   };
 }
 
+const DECISION_VALUES = {
+  supports_core_claim: ["yes", "partial", "unknown", "no", "contradiction", "unsupported"],
+  supports_requested_action_size: ["yes", "partial", "unknown", "no", "unsupported"],
+  source_independence: ["strong", "some", "weak", "none", "not_applicable"],
+  public_context_plausibility: ["all_found", "some_found", "weak", "not_found", "not_applicable"],
+  claimant_linkage: ["verified", "partial", "unknown", "unverified", "contradicted"],
+  repeat_or_top_up_support: ["fresh_reason_present", "weak", "none", "not_applicable"],
+};
+
+function isRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
 function normalizeLane(laneType, raw) {
+  if (!isRecord(raw)) throw new Error(`Lane "${laneType}" must be a JSON object.`);
   if (raw?.lane_type !== undefined && String(raw.lane_type) !== laneType) {
     throw new Error(`Lane spec "${laneType}" does not match lane_type "${raw.lane_type}" in lane JSON.`);
   }
-  const status = String(raw?.status ?? "completed");
+  const status = raw.status === undefined ? "missing" : raw.status;
   if (!VALID_LANE_STATUSES.has(status)) {
     throw new Error(`Invalid status "${status}" for lane "${laneType}".`);
+  }
+  if (status === "completed") {
+    if (!Array.isArray(raw.findings) || !isRecord(raw.decision)) {
+      throw new Error(`Completed lane "${laneType}" requires findings and decision.`);
+    }
+    const requiredFields = laneType === "evidence"
+      ? ["supports_core_claim", "supports_requested_action_size", "claimant_linkage"]
+      : laneType === "external_context" ? ["public_context_plausibility", "source_independence"] : [];
+    for (const field of requiredFields) {
+      if (!Object.prototype.hasOwnProperty.call(raw.decision, field)) {
+        throw new Error(`Completed lane "${laneType}" requires decision.${field}.`);
+      }
+    }
+  }
+  if (raw.decision !== undefined && !isRecord(raw.decision)) {
+    throw new Error(`Invalid decision object for lane "${laneType}".`);
+  }
+  for (const [field, values] of Object.entries(DECISION_VALUES)) {
+    if (raw.decision && Object.prototype.hasOwnProperty.call(raw.decision, field) &&
+        !values.includes(raw.decision[field])) {
+      throw new Error(`Invalid decision.${field} for lane "${laneType}".`);
+    }
+  }
+  for (const finding of asArray(raw.findings)) {
+    if (!isRecord(finding) || !Object.prototype.hasOwnProperty.call(SEVERITY_RANK, finding.severity)) {
+      throw new Error(`Invalid finding or severity for lane "${laneType}".`);
+    }
   }
   const lane = {
     ...(raw && typeof raw === "object" ? raw : {}),
@@ -226,7 +267,9 @@ function collectSignals(policy, lanes) {
   const map = laneMap(lanes);
   const evidence = map.get("evidence")?.decision ?? {};
   const external = map.get("external_context")?.decision ?? {};
-  const repeatSupport = String(evidence.repeat_or_top_up_support ?? external.repeat_or_top_up_support ?? "not_applicable");
+  const repeatSupport = map.get("evidence")?.status === "completed" && evidence.repeat_or_top_up_support !== undefined
+    ? evidence.repeat_or_top_up_support
+    : map.get("external_context")?.status === "completed" ? external.repeat_or_top_up_support : undefined;
   const coreSupport = String(evidence.supports_core_claim ?? "unknown");
   const actionSizeSupport = lanes
     .filter((lane) => Object.prototype.hasOwnProperty.call(lane.decision, "supports_requested_action_size"))
@@ -322,7 +365,7 @@ function collectSignals(policy, lanes) {
       refs: ["claimant_linkage"],
     });
   }
-  if (policy.requested_action?.is_repeat_action && ["none", "weak"].includes(repeatSupport)) {
+  if (policy.requested_action?.is_repeat_action && repeatSupport !== "fresh_reason_present") {
     signals.push({
       code: "REPEAT_ACTION_WITHOUT_FRESH_REASON",
       severity: "medium",

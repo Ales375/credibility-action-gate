@@ -50,7 +50,7 @@ node scripts/credibility-coordinator.mjs \
 - Search results are not corroboration by themselves. Look for source independence and claim relevance.
 - Context evidence does not prove linkage or use of funds. Keep "the event or need is plausible" separate from "this claimant is connected to it" and "this action will help."
 - For irreversible transfers, consider recipient custody and history when available. Prior receipt followed by unexplained loss of accountability can reduce eligibility, but dust balances or urgent cash-out behavior are not adverse by themselves without other pattern evidence.
-- Missing required lanes fail closed for any action size. `missing`, `error`, and `not_applicable` required lanes mean the current record is not strong enough for full eligibility.
+- Missing required lanes fail closed for any action size. `missing`, `error`, and `not_applicable` required lanes give a zero recommended amount. Omitted status is missing; malformed completed reviews cause a CLI error and confer no eligibility. Do not reuse stale output after a failed run.
 - The core skill is analysis-only. Execution belongs to the calling agent and its operator policy.
 
 ## Hermes-Compatible Defaults
