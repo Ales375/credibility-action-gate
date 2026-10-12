@@ -389,7 +389,7 @@ for (const operation of ["writeFileSync", "renameSync"]) {
     fs.writeFileSync(preload, `import fs from "node:fs";
       const original = fs.${operation};
       fs.${operation} = function(file, ...args) {
-        if (String(file).endsWith(".tmp")) {
+        if (typeof file === "number" || String(file).endsWith(".tmp")) {
           ${operation === "writeFileSync" ? 'original.call(this, file, "partial", args[1]);' : ''}
           throw new Error("synthetic output failure");
         }
@@ -403,5 +403,24 @@ for (const operation of ["writeFileSync", "renameSync"]) {
     assert.deepEqual(JSON.parse(fs.readFileSync(c.evidence)), cleanEvidence);
   });
 }
+
+test("exclusive-create collision preserves the unowned temporary file", () => {
+  const c = outputCase();
+  assert.equal(c.run().status, 0);
+  const preload = path.join(c.dir, "collision.mjs");
+  fs.writeFileSync(preload, `import fs from "node:fs";
+    const original = fs.openSync;
+    fs.openSync = function(file, flags, ...args) {
+      if (String(file).endsWith(".tmp") && flags === "wx") {
+        fs.writeFileSync(file, "pre-existing unrelated data");
+      }
+      return original.call(this, file, flags, ...args);
+    };`);
+  assert.equal(c.run(c.out, preload).status, 1);
+  assert.equal(fs.existsSync(c.out), false);
+  const temporary = fs.readdirSync(c.dir).filter(name => name.endsWith(".tmp"));
+  assert.equal(temporary.length, 1);
+  assert.equal(fs.readFileSync(path.join(c.dir, temporary[0]), "utf8"), "pre-existing unrelated data");
+});
 
 if (process.exitCode) process.exit(process.exitCode);

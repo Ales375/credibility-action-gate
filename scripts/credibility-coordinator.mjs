@@ -120,12 +120,18 @@ function prepareOutput(file, inputFiles) {
 function writeJson(file, data) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const temporary = `${file}.${randomUUID()}.tmp`;
+  let owned = false;
   try {
-    fs.writeFileSync(temporary, `${JSON.stringify(data, null, 2)}\n`, { flag: "wx", mode: 0o600 });
+    const fd = fs.openSync(temporary, "wx", 0o600);
+    owned = true;
+    try { fs.writeFileSync(fd, `${JSON.stringify(data, null, 2)}\n`); }
+    finally { fs.closeSync(fd); }
     fs.renameSync(temporary, file);
   } finally {
-    try { fs.unlinkSync(temporary); }
-    catch (error) { if (error.code !== "ENOENT") throw error; }
+    if (owned) {
+      try { fs.unlinkSync(temporary); }
+      catch (error) { if (error.code !== "ENOENT") throw error; }
+    }
   }
 }
 
