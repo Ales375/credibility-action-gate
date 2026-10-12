@@ -49,6 +49,14 @@ Run the regression suite:
 node scripts/test-credibility-coordinator.mjs
 ```
 
+## Coordinator contract 0.2.0
+
+`review_version: "0.2.0"` identifies the stricter input contract. Completed reviews need explicit status, findings and the lane's required decision fields. Known decision values and finding severities must use the documented lowercase enums; implicit completion and values such as `"High"` are rejected. Repeat actions require affirmative fresh support. Update lane producers before adopting this version; see [lane contracts](references/lane_contracts.md).
+
+With `--out`, the coordinator validates the destination and checks policy/lane aliases before removing an old result, then evaluates inputs and writes a complete new result through a temporary file and rename. Input aliases, linked output files and non-file destinations are rejected without modifying them. Use a dedicated output path and one writer per path. Invalid arguments or an unsafe/unresolvable destination can prevent safe invalidation, as can filesystem permissions or a crash before invalidation. Always require successful exit and a fresh result for the current invocation; file existence alone never authorizes action. Diagnostic output contains lane details and should remain private.
+
+This version repairs structural completion and repeat handling. It does not settle the existing semantic policy for unknown claim/linkage support or confidence. Resolve that policy and verify integration behavior before funded runtime adoption.
+
 ## Dispositions
 
 - `eligible_for_full_policy_action`

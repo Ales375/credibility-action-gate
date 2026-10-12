@@ -8,6 +8,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 
 const SEVERITY_RANK = {
   info: 0,
@@ -81,9 +82,51 @@ function readJson(file) {
   return JSON.parse(fs.readFileSync(file, "utf8"));
 }
 
+// Resolve existing ancestors too, so aliases through directory links are detected
+// even when the selected output or an input does not exist yet.
+function canonicalPath(file) {
+  const absolute = path.resolve(file);
+  try {
+    return fs.realpathSync(absolute);
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+    const parent = path.dirname(absolute);
+    if (parent === absolute) throw error;
+    return path.join(canonicalPath(parent), path.basename(absolute));
+  }
+}
+
+function prepareOutput(file, inputFiles) {
+  const output = path.resolve(file);
+  let stat;
+  try { stat = fs.lstatSync(output); }
+  catch (error) { if (error.code !== "ENOENT") throw error; }
+  if (stat && (!stat.isFile() || stat.nlink !== 1)) {
+    throw new Error("Output must be a regular file with one link, not a directory or link.");
+  }
+  const comparable = (value) => process.platform === "win32" ? value.toLowerCase() : value;
+  const destination = canonicalPath(output);
+  for (const input of inputFiles) {
+    if (comparable(destination) === comparable(canonicalPath(input))) {
+      throw new Error("Output must not alias a policy or lane input.");
+    }
+  }
+  // Only the explicitly selected, validated output is invalidated. Do this
+  // before reading/parsing inputs, so their failures cannot retain eligibility.
+  if (stat) fs.unlinkSync(output);
+  return destination;
+}
+
 function writeJson(file, data) {
-  fs.mkdirSync(path.dirname(path.resolve(file)), { recursive: true });
-  fs.writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const temporary = `${file}.${randomUUID()}.tmp`;
+  try {
+    fs.writeFileSync(temporary, `${JSON.stringify(data, null, 2)}\n`, { flag: "wx", mode: 0o600 });
+    fs.renameSync(temporary, file);
+  } finally {
+    try { fs.unlinkSync(temporary); }
+    catch (error) { if (error.code !== "ENOENT") throw error; }
+  }
 }
 
 function asArray(value) {
@@ -486,7 +529,7 @@ function coordinate(policyInput, lanes) {
   const selected = chooseDisposition(policy, collected.signals);
   return {
     review_type: "credibility-action-gate",
-    review_version: "0.1.0",
+    review_version: "0.2.0",
     reviewed_at: new Date().toISOString(),
     status: "completed",
     analysis_only: true,
@@ -527,10 +570,13 @@ function coordinate(policyInput, lanes) {
 function main() {
   try {
     const args = parseArgs(process.argv.slice(2));
+    const inputFiles = args.lanes.map((spec) => parseLaneSpec(spec).file);
+    if (args.policyFile) inputFiles.push(args.policyFile);
+    const output = args.out ? prepareOutput(args.out, inputFiles) : undefined;
     const policy = args.policyFile ? readJson(args.policyFile) : DEFAULT_POLICY;
     const lanes = loadLanes(args.lanes);
     const result = coordinate(policy, lanes);
-    if (args.out) writeJson(args.out, result);
+    if (output) writeJson(output, result);
     else process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } catch (error) {
     process.stderr.write(`credibility-coordinator error: ${error.message}\n`);

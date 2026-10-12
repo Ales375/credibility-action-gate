@@ -4,8 +4,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { execFileSync, spawnSync } from "node:child_process";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const SCRIPT = fileURLToPath(new URL("./credibility-coordinator.mjs", import.meta.url));
 
@@ -295,5 +295,113 @@ test("operator required linkage review cannot be replaced by positive context", 
   assert.equal(result.maximum_recommended_size, 0);
   assert(result.missing_lanes.includes("recipient_linkage"));
 });
+
+function outputCase() {
+  const dir = tempDir();
+  const policy = writeJson(dir, "policy.json", basePolicy());
+  const evidence = writeJson(dir, "evidence.json", cleanEvidence);
+  const external = writeJson(dir, "external.json", cleanExternal);
+  const graph = writeJson(dir, "graph.json", cleanGraph);
+  const out = path.join(dir, "out.json");
+  const args = [SCRIPT, "--policy", policy, "--lane", `evidence=${evidence}`,
+    "--lane", `external_context=${external}`, "--lane", `graph_history=${graph}`];
+  const run = (target = out, preload) => spawnSync(process.execPath, [...(preload ? ["--import", pathToFileURL(preload).href] : []), ...args, "--out", target], { encoding: "utf8" });
+  return { dir, policy, evidence, out, run };
+}
+
+test("successful output then malformed review removes stale eligibility", () => {
+  const c = outputCase();
+  assert.equal(c.run().status, 0);
+  assert.equal(JSON.parse(fs.readFileSync(c.out)).maximum_recommended_size, 5);
+  fs.writeFileSync(c.evidence, "{");
+  assert.equal(c.run().status, 1);
+  assert.equal(fs.existsSync(c.out), false);
+});
+
+test("missing input removes stale eligibility", () => {
+  const c = outputCase();
+  assert.equal(c.run().status, 0);
+  fs.unlinkSync(c.evidence);
+  assert.equal(c.run().status, 1);
+  assert.equal(fs.existsSync(c.out), false);
+});
+
+for (const input of ["policy", "evidence"]) {
+  test(`output cannot overwrite ${input} input`, () => {
+    const c = outputCase();
+    const before = fs.readFileSync(c[input]);
+    assert.equal(c.run(c[input]).status, 1);
+    assert.deepEqual(fs.readFileSync(c[input]), before);
+  });
+}
+
+test("hardlinked output cannot alter an input", () => {
+  const c = outputCase();
+  fs.linkSync(c.evidence, c.out);
+  const before = fs.readFileSync(c.evidence);
+  assert.equal(c.run().status, 1);
+  assert.deepEqual(fs.readFileSync(c.evidence), before);
+  assert.deepEqual(fs.readFileSync(c.out), before);
+});
+
+test("output directory rejected without removing its contents", () => {
+  const c = outputCase();
+  fs.mkdirSync(c.out);
+  const marker = writeJson(c.out, "keep.json", { keep: true });
+  assert.equal(c.run().status, 1);
+  assert.deepEqual(JSON.parse(fs.readFileSync(marker)), { keep: true });
+});
+
+test("output creation failure returns no eligible stdout", () => {
+  const c = outputCase();
+  const blocker = writeJson(c.dir, "file-parent", { keep: true });
+  const result = c.run(path.join(blocker, "out.json"));
+  assert.equal(result.status, 1);
+  assert.equal(result.stdout, "");
+  assert.deepEqual(JSON.parse(fs.readFileSync(blocker)), { keep: true });
+});
+
+test("successful output replaces prior result and creates nested directory", () => {
+  const c = outputCase();
+  const out = path.join(c.dir, "nested", "result.json");
+  assert.equal(c.run(out).status, 0);
+  assert.equal(c.run(out).status, 0);
+  const result = JSON.parse(fs.readFileSync(out));
+  assert.equal(result.maximum_recommended_size, 5);
+  assert.equal(result.review_version, "0.2.0");
+  assert.deepEqual(fs.readdirSync(path.dirname(out)), ["result.json"]);
+});
+
+test("directory-link alias cannot overwrite lane input", () => {
+  const c = outputCase();
+  const alias = path.join(c.dir, "alias");
+  fs.symlinkSync(c.dir, alias, process.platform === "win32" ? "junction" : "dir");
+  const before = fs.readFileSync(c.evidence);
+  assert.equal(c.run(path.join(alias, "evidence.json")).status, 1);
+  assert.deepEqual(fs.readFileSync(c.evidence), before);
+});
+
+for (const operation of ["writeFileSync", "renameSync"]) {
+  test(`${operation} failure leaves no stale output or temporary result`, () => {
+    const c = outputCase();
+    assert.equal(c.run().status, 0);
+    const preload = path.join(c.dir, "fault.mjs");
+    fs.writeFileSync(preload, `import fs from "node:fs";
+      const original = fs.${operation};
+      fs.${operation} = function(file, ...args) {
+        if (String(file).endsWith(".tmp")) {
+          ${operation === "writeFileSync" ? 'original.call(this, file, "partial", args[1]);' : ''}
+          throw new Error("synthetic output failure");
+        }
+        return original.call(this, file, ...args);
+      };`);
+    const result = c.run(c.out, preload);
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, "");
+    assert.equal(fs.existsSync(c.out), false);
+    assert.equal(fs.readdirSync(c.dir).some(name => name.endsWith(".tmp")), false);
+    assert.deepEqual(JSON.parse(fs.readFileSync(c.evidence)), cleanEvidence);
+  });
+}
 
 if (process.exitCode) process.exit(process.exitCode);
