@@ -524,4 +524,20 @@ test("uncertainty opt-in does not permit high findings when rejection preference
   assert.equal(result.maximum_recommended_size, 0);
 });
 
+test("one medium finding remains material uncertainty", () => {
+  const lanes = { evidence: { ...cleanEvidence, findings: [{ code: "UNRESOLVED", severity: "medium", summary: "Material review limitation." }] }, external_context: cleanExternal, graph_history: cleanGraph };
+  const result = runCase({ policy: basePolicy(), lanes });
+  assert.equal(result.maximum_recommended_size, 0);
+  assert.equal(result.confidence, "low_to_medium");
+  assert(result.reasons.some(reason => reason.refs.includes("evidence:UNRESOLVED")));
+  assert.equal(runCase({ policy: basePolicy({ disposition_preferences: { uncertainty_action: "small_test" } }), lanes }).maximum_recommended_size, 1);
+});
+for (const cap of [undefined, null, 0, -1, "bad"]) {
+  test(`uncertainty opt-in rejects absent or invalid explicit cap ${cap}`, () => {
+    runCaseExpectError({ policy: basePolicy({ disposition_preferences: { uncertainty_action: "small_test" }, authority: {
+      max_autonomous_action_size: 10, small_test_action_size: cap, serious_action_threshold: 5,
+    } }), lanes: { evidence: cleanEvidence, external_context: cleanExternal, graph_history: cleanGraph } });
+  });
+}
+
 if (process.exitCode) process.exit(process.exitCode);

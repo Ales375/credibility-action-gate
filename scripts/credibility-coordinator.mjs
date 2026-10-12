@@ -164,6 +164,11 @@ function mergePolicy(input) {
   if (uncertainty !== undefined && !["monitor", "small_test"].includes(uncertainty)) {
     throw new Error("uncertainty_action must be monitor or small_test.");
   }
+  if (uncertainty === "small_test" &&
+      !(typeof policy.authority?.small_test_action_size === "number" &&
+        Number.isFinite(policy.authority.small_test_action_size) && policy.authority.small_test_action_size > 0)) {
+    throw new Error("small_test uncertainty permission requires an explicit positive finite small_test_action_size.");
+  }
   return {
     ...DEFAULT_POLICY,
     ...policy,
@@ -357,6 +362,11 @@ function collectSignals(policy, lanes) {
       summary: "At least one lane emitted a high-or-higher finding.",
       refs: highFindings.map((finding) => `${finding.lane_type}:${finding.code}`),
     });
+  }
+  if (mediumPlusFindings.length === 1 && mediumPlusFindings[0].severity === "medium") {
+    signals.push({ code: "MATERIAL_REVIEW_CONCERN", severity: "medium",
+      summary: "A lane reports a material review concern.",
+      refs: mediumPlusFindings.map((finding) => `${finding.lane_type}:${finding.code}`) });
   }
   if (mediumPlusFindings.length >= 2 || concernLanes.size >= 2) {
     signals.push({
