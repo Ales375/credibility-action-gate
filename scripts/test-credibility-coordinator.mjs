@@ -4,8 +4,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { execFileSync, spawnSync } from "node:child_process";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const SCRIPT = fileURLToPath(new URL("./credibility-coordinator.mjs", import.meta.url));
 
@@ -226,6 +226,201 @@ test("lane details preserve unknown fields", () => {
   const result = runCase({ policy: basePolicy(), lanes: { evidence, external_context: cleanExternal, graph_history: cleanGraph } });
   const detail = result.lane_details.find((lane) => lane.lane_type === "evidence");
   assert.equal(detail.reviewer_note, "kept");
+});
+
+test("empty required reviews do not permit action", () => {
+  const result = runCase({ policy: basePolicy(), lanes: { evidence: {}, external_context: {}, graph_history: cleanGraph } });
+  assert.equal(result.maximum_recommended_size, 0);
+  assert.deepEqual(result.missing_lanes, ["evidence", "external_context"]);
+});
+
+for (const support of [undefined, "not_applicable", "weak", "none"]) {
+  test(`repeat support ${support} does not permit action`, () => {
+    const evidence = structuredClone(cleanEvidence);
+    if (support === undefined) delete evidence.decision.repeat_or_top_up_support;
+    else evidence.decision.repeat_or_top_up_support = support;
+    const result = runCase({ policy: basePolicy({ requested_action: { size: 5, is_repeat_action: true } }),
+      lanes: { evidence, external_context: cleanExternal, graph_history: cleanGraph } });
+    assert.equal(result.maximum_recommended_size, 0);
+    assert(result.reasons.some(reason => reason.code === "REPEAT_ACTION_WITHOUT_FRESH_REASON"));
+  });
+}
+
+for (const lane of [null, [], { status: "completed" }, { status: "completed", findings: [], decision: {} },
+  { ...cleanEvidence, findings: "none" }, { ...cleanEvidence, decision: [] },
+  { ...cleanEvidence, findings: [{ severity: "HIGH " }] }]) {
+  test(`malformed review rejected: ${JSON.stringify(lane)}`, () => {
+    runCaseExpectError({ policy: basePolicy(), lanes: { evidence: lane, external_context: cleanExternal } });
+  });
+}
+for (const field of Object.keys(cleanEvidence.decision)) {
+  test(`invalid ${field} rejected`, () => {
+    runCaseExpectError({ policy: basePolicy(), lanes: { evidence: {
+      ...cleanEvidence, decision: { ...cleanEvidence.decision, [field]: "invalid" } } } });
+  });
+}
+for (const field of Object.keys(cleanExternal.decision)) {
+  test(`invalid ${field} rejected`, () => {
+    runCaseExpectError({ policy: basePolicy(), lanes: { external_context: {
+      ...cleanExternal, decision: { ...cleanExternal.decision, [field]: "invalid" } } } });
+  });
+}
+test("explicit fresh repeat reason permits action", () => {
+  const evidence = { ...cleanEvidence, decision: { ...cleanEvidence.decision, repeat_or_top_up_support: "fresh_reason_present" } };
+  const result = runCase({ policy: basePolicy({ requested_action: { size: 5, is_repeat_action: true } }),
+    lanes: { evidence, external_context: cleanExternal, graph_history: cleanGraph } });
+  assert.equal(result.maximum_recommended_size, 5);
+});
+test("required error lane stays zero", () => {
+  const result = runCase({ policy: basePolicy(), lanes: { evidence: cleanEvidence, external_context: { status: "error" }, graph_history: cleanGraph } });
+  assert.equal(result.maximum_recommended_size, 0);
+});
+test("contradicted linkage rejects despite positive context", () => {
+  const evidence = { ...cleanEvidence, decision: { ...cleanEvidence.decision, claimant_linkage: "contradicted" } };
+  const result = runCase({ policy: basePolicy(), lanes: { evidence, external_context: cleanExternal, graph_history: cleanGraph } });
+  assert.equal(result.disposition, "reject_current_record");
+  assert.equal(result.maximum_recommended_size, 0);
+});
+for (const code of ["FAST_OUTFLOW_ONLY", "WEBSITE_INACCESSIBLE", "PRIVACY_REDACTIONS", "NEVER_FUNDED_NO_OUTCOMES"]) {
+  test(`${code} alone does not deny supported action`, () => {
+    const evidence = { ...cleanEvidence, findings: [{ code, severity: "info", summary: "No independent adverse evidence." }] };
+    const result = runCase({ policy: basePolicy(), lanes: { evidence, external_context: cleanExternal, graph_history: cleanGraph } });
+    assert.equal(result.maximum_recommended_size, 5);
+  });
+}
+test("operator required linkage review cannot be replaced by positive context", () => {
+  const result = runCase({ policy: basePolicy({ required_lanes: ["evidence", "external_context", "recipient_linkage"] }),
+    lanes: { evidence: cleanEvidence, external_context: cleanExternal, graph_history: cleanGraph,
+      recipient_linkage: { status: "missing" } } });
+  assert.equal(result.maximum_recommended_size, 0);
+  assert(result.missing_lanes.includes("recipient_linkage"));
+});
+
+function outputCase() {
+  const dir = tempDir();
+  const policy = writeJson(dir, "policy.json", basePolicy());
+  const evidence = writeJson(dir, "evidence.json", cleanEvidence);
+  const external = writeJson(dir, "external.json", cleanExternal);
+  const graph = writeJson(dir, "graph.json", cleanGraph);
+  const out = path.join(dir, "out.json");
+  const args = [SCRIPT, "--policy", policy, "--lane", `evidence=${evidence}`,
+    "--lane", `external_context=${external}`, "--lane", `graph_history=${graph}`];
+  const run = (target = out, preload) => spawnSync(process.execPath, [...(preload ? ["--import", pathToFileURL(preload).href] : []), ...args, "--out", target], { encoding: "utf8" });
+  return { dir, policy, evidence, out, run };
+}
+
+test("successful output then malformed review removes stale eligibility", () => {
+  const c = outputCase();
+  assert.equal(c.run().status, 0);
+  assert.equal(JSON.parse(fs.readFileSync(c.out)).maximum_recommended_size, 5);
+  fs.writeFileSync(c.evidence, "{");
+  assert.equal(c.run().status, 1);
+  assert.equal(fs.existsSync(c.out), false);
+});
+
+test("missing input removes stale eligibility", () => {
+  const c = outputCase();
+  assert.equal(c.run().status, 0);
+  fs.unlinkSync(c.evidence);
+  assert.equal(c.run().status, 1);
+  assert.equal(fs.existsSync(c.out), false);
+});
+
+for (const input of ["policy", "evidence"]) {
+  test(`output cannot overwrite ${input} input`, () => {
+    const c = outputCase();
+    const before = fs.readFileSync(c[input]);
+    assert.equal(c.run(c[input]).status, 1);
+    assert.deepEqual(fs.readFileSync(c[input]), before);
+  });
+}
+
+test("hardlinked output cannot alter an input", () => {
+  const c = outputCase();
+  fs.linkSync(c.evidence, c.out);
+  const before = fs.readFileSync(c.evidence);
+  assert.equal(c.run().status, 1);
+  assert.deepEqual(fs.readFileSync(c.evidence), before);
+  assert.deepEqual(fs.readFileSync(c.out), before);
+});
+
+test("output directory rejected without removing its contents", () => {
+  const c = outputCase();
+  fs.mkdirSync(c.out);
+  const marker = writeJson(c.out, "keep.json", { keep: true });
+  assert.equal(c.run().status, 1);
+  assert.deepEqual(JSON.parse(fs.readFileSync(marker)), { keep: true });
+});
+
+test("output creation failure returns no eligible stdout", () => {
+  const c = outputCase();
+  const blocker = writeJson(c.dir, "file-parent", { keep: true });
+  const result = c.run(path.join(blocker, "out.json"));
+  assert.equal(result.status, 1);
+  assert.equal(result.stdout, "");
+  assert.deepEqual(JSON.parse(fs.readFileSync(blocker)), { keep: true });
+});
+
+test("successful output replaces prior result and creates nested directory", () => {
+  const c = outputCase();
+  const out = path.join(c.dir, "nested", "result.json");
+  assert.equal(c.run(out).status, 0);
+  assert.equal(c.run(out).status, 0);
+  const result = JSON.parse(fs.readFileSync(out));
+  assert.equal(result.maximum_recommended_size, 5);
+  assert.equal(result.review_version, "0.2.0");
+  assert.deepEqual(fs.readdirSync(path.dirname(out)), ["result.json"]);
+});
+
+test("directory-link alias cannot overwrite lane input", () => {
+  const c = outputCase();
+  const alias = path.join(c.dir, "alias");
+  fs.symlinkSync(c.dir, alias, process.platform === "win32" ? "junction" : "dir");
+  const before = fs.readFileSync(c.evidence);
+  assert.equal(c.run(path.join(alias, "evidence.json")).status, 1);
+  assert.deepEqual(fs.readFileSync(c.evidence), before);
+});
+
+for (const operation of ["writeFileSync", "renameSync"]) {
+  test(`${operation} failure leaves no stale output or temporary result`, () => {
+    const c = outputCase();
+    assert.equal(c.run().status, 0);
+    const preload = path.join(c.dir, "fault.mjs");
+    fs.writeFileSync(preload, `import fs from "node:fs";
+      const original = fs.${operation};
+      fs.${operation} = function(file, ...args) {
+        if (typeof file === "number" || String(file).endsWith(".tmp")) {
+          ${operation === "writeFileSync" ? 'original.call(this, file, "partial", args[1]);' : ''}
+          throw new Error("synthetic output failure");
+        }
+        return original.call(this, file, ...args);
+      };`);
+    const result = c.run(c.out, preload);
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, "");
+    assert.equal(fs.existsSync(c.out), false);
+    assert.equal(fs.readdirSync(c.dir).some(name => name.endsWith(".tmp")), false);
+    assert.deepEqual(JSON.parse(fs.readFileSync(c.evidence)), cleanEvidence);
+  });
+}
+
+test("exclusive-create collision preserves the unowned temporary file", () => {
+  const c = outputCase();
+  assert.equal(c.run().status, 0);
+  const preload = path.join(c.dir, "collision.mjs");
+  fs.writeFileSync(preload, `import fs from "node:fs";
+    const original = fs.openSync;
+    fs.openSync = function(file, flags, ...args) {
+      if (String(file).endsWith(".tmp") && flags === "wx") {
+        fs.writeFileSync(file, "pre-existing unrelated data");
+      }
+      return original.call(this, file, flags, ...args);
+    };`);
+  assert.equal(c.run(c.out, preload).status, 1);
+  assert.equal(fs.existsSync(c.out), false);
+  const temporary = fs.readdirSync(c.dir).filter(name => name.endsWith(".tmp"));
+  assert.equal(temporary.length, 1);
+  assert.equal(fs.readFileSync(path.join(c.dir, temporary[0]), "utf8"), "pre-existing unrelated data");
 });
 
 if (process.exitCode) process.exit(process.exitCode);

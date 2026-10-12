@@ -8,6 +8,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 
 const SEVERITY_RANK = {
   info: 0,
@@ -81,9 +82,57 @@ function readJson(file) {
   return JSON.parse(fs.readFileSync(file, "utf8"));
 }
 
+// Resolve existing ancestors too, so aliases through directory links are detected
+// even when the selected output or an input does not exist yet.
+function canonicalPath(file) {
+  const absolute = path.resolve(file);
+  try {
+    return fs.realpathSync(absolute);
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+    const parent = path.dirname(absolute);
+    if (parent === absolute) throw error;
+    return path.join(canonicalPath(parent), path.basename(absolute));
+  }
+}
+
+function prepareOutput(file, inputFiles) {
+  const output = path.resolve(file);
+  let stat;
+  try { stat = fs.lstatSync(output); }
+  catch (error) { if (error.code !== "ENOENT") throw error; }
+  if (stat && (!stat.isFile() || stat.nlink !== 1)) {
+    throw new Error("Output must be a regular file with one link, not a directory or link.");
+  }
+  const comparable = (value) => process.platform === "win32" ? value.toLowerCase() : value;
+  const destination = canonicalPath(output);
+  for (const input of inputFiles) {
+    if (comparable(destination) === comparable(canonicalPath(input))) {
+      throw new Error("Output must not alias a policy or lane input.");
+    }
+  }
+  // Only the explicitly selected, validated output is invalidated. Do this
+  // before reading/parsing inputs, so their failures cannot retain eligibility.
+  if (stat) fs.unlinkSync(output);
+  return destination;
+}
+
 function writeJson(file, data) {
-  fs.mkdirSync(path.dirname(path.resolve(file)), { recursive: true });
-  fs.writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const temporary = `${file}.${randomUUID()}.tmp`;
+  let owned = false;
+  try {
+    const fd = fs.openSync(temporary, "wx", 0o600);
+    owned = true;
+    try { fs.writeFileSync(fd, `${JSON.stringify(data, null, 2)}\n`); }
+    finally { fs.closeSync(fd); }
+    fs.renameSync(temporary, file);
+  } finally {
+    if (owned) {
+      try { fs.unlinkSync(temporary); }
+      catch (error) { if (error.code !== "ENOENT") throw error; }
+    }
+  }
 }
 
 function asArray(value) {
@@ -154,13 +203,54 @@ function normalizeFinding(finding) {
   };
 }
 
+const DECISION_VALUES = {
+  supports_core_claim: ["yes", "partial", "unknown", "no", "contradiction", "unsupported"],
+  supports_requested_action_size: ["yes", "partial", "unknown", "no", "unsupported"],
+  source_independence: ["strong", "some", "weak", "none", "not_applicable"],
+  public_context_plausibility: ["all_found", "some_found", "weak", "not_found", "not_applicable"],
+  claimant_linkage: ["verified", "partial", "unknown", "unverified", "contradicted"],
+  repeat_or_top_up_support: ["fresh_reason_present", "weak", "none", "not_applicable"],
+};
+
+function isRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
 function normalizeLane(laneType, raw) {
+  if (!isRecord(raw)) throw new Error(`Lane "${laneType}" must be a JSON object.`);
   if (raw?.lane_type !== undefined && String(raw.lane_type) !== laneType) {
     throw new Error(`Lane spec "${laneType}" does not match lane_type "${raw.lane_type}" in lane JSON.`);
   }
-  const status = String(raw?.status ?? "completed");
+  const status = raw.status === undefined ? "missing" : raw.status;
   if (!VALID_LANE_STATUSES.has(status)) {
     throw new Error(`Invalid status "${status}" for lane "${laneType}".`);
+  }
+  if (status === "completed") {
+    if (!Array.isArray(raw.findings) || !isRecord(raw.decision)) {
+      throw new Error(`Completed lane "${laneType}" requires findings and decision.`);
+    }
+    const requiredFields = laneType === "evidence"
+      ? ["supports_core_claim", "supports_requested_action_size", "claimant_linkage"]
+      : laneType === "external_context" ? ["public_context_plausibility", "source_independence"] : [];
+    for (const field of requiredFields) {
+      if (!Object.prototype.hasOwnProperty.call(raw.decision, field)) {
+        throw new Error(`Completed lane "${laneType}" requires decision.${field}.`);
+      }
+    }
+  }
+  if (raw.decision !== undefined && !isRecord(raw.decision)) {
+    throw new Error(`Invalid decision object for lane "${laneType}".`);
+  }
+  for (const [field, values] of Object.entries(DECISION_VALUES)) {
+    if (raw.decision && Object.prototype.hasOwnProperty.call(raw.decision, field) &&
+        !values.includes(raw.decision[field])) {
+      throw new Error(`Invalid decision.${field} for lane "${laneType}".`);
+    }
+  }
+  for (const finding of asArray(raw.findings)) {
+    if (!isRecord(finding) || !Object.prototype.hasOwnProperty.call(SEVERITY_RANK, finding.severity)) {
+      throw new Error(`Invalid finding or severity for lane "${laneType}".`);
+    }
   }
   const lane = {
     ...(raw && typeof raw === "object" ? raw : {}),
@@ -226,7 +316,9 @@ function collectSignals(policy, lanes) {
   const map = laneMap(lanes);
   const evidence = map.get("evidence")?.decision ?? {};
   const external = map.get("external_context")?.decision ?? {};
-  const repeatSupport = String(evidence.repeat_or_top_up_support ?? external.repeat_or_top_up_support ?? "not_applicable");
+  const repeatSupport = map.get("evidence")?.status === "completed" && evidence.repeat_or_top_up_support !== undefined
+    ? evidence.repeat_or_top_up_support
+    : map.get("external_context")?.status === "completed" ? external.repeat_or_top_up_support : undefined;
   const coreSupport = String(evidence.supports_core_claim ?? "unknown");
   const actionSizeSupport = lanes
     .filter((lane) => Object.prototype.hasOwnProperty.call(lane.decision, "supports_requested_action_size"))
@@ -322,7 +414,7 @@ function collectSignals(policy, lanes) {
       refs: ["claimant_linkage"],
     });
   }
-  if (policy.requested_action?.is_repeat_action && ["none", "weak"].includes(repeatSupport)) {
+  if (policy.requested_action?.is_repeat_action && repeatSupport !== "fresh_reason_present") {
     signals.push({
       code: "REPEAT_ACTION_WITHOUT_FRESH_REASON",
       severity: "medium",
@@ -443,7 +535,7 @@ function coordinate(policyInput, lanes) {
   const selected = chooseDisposition(policy, collected.signals);
   return {
     review_type: "credibility-action-gate",
-    review_version: "0.1.0",
+    review_version: "0.2.0",
     reviewed_at: new Date().toISOString(),
     status: "completed",
     analysis_only: true,
@@ -484,10 +576,13 @@ function coordinate(policyInput, lanes) {
 function main() {
   try {
     const args = parseArgs(process.argv.slice(2));
+    const inputFiles = args.lanes.map((spec) => parseLaneSpec(spec).file);
+    if (args.policyFile) inputFiles.push(args.policyFile);
+    const output = args.out ? prepareOutput(args.out, inputFiles) : undefined;
     const policy = args.policyFile ? readJson(args.policyFile) : DEFAULT_POLICY;
     const lanes = loadLanes(args.lanes);
     const result = coordinate(policy, lanes);
-    if (args.out) writeJson(args.out, result);
+    if (output) writeJson(output, result);
     else process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } catch (error) {
     process.stderr.write(`credibility-coordinator error: ${error.message}\n`);

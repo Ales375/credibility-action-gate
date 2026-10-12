@@ -25,6 +25,7 @@ The coordinator compares independent lane outputs. Lanes may be produced by code
   "decision": {
     "supports_core_claim": "partial",
     "supports_requested_action_size": "unknown",
+    "claimant_linkage": "unknown",
     "source_independence": "not_applicable"
   },
   "limitations": [
@@ -66,7 +67,11 @@ The coordinator compares independent lane outputs. Lanes may be produced by code
 
 ## Decision Fields The Coordinator Understands
 
-The coordinator is intentionally permissive. It uses these fields when present:
+Completed lanes require an explicit `status: "completed"`, a `findings` array (which may be empty), and a `decision` object. Omitted status is treated as `missing`. Completed `evidence` lanes must include `supports_core_claim`, `supports_requested_action_size`, and `claimant_linkage`; completed `external_context` lanes must include `public_context_plausibility` and `source_independence`. Other lane types retain their domain-specific decision shape, including an empty object for a completed history review with no decision fields.
+
+Known decision fields must use the values below. Malformed records, invalid decision values and invalid finding severities cause a nonzero CLI exit without a disposition. Callers must treat that failure as no eligibility and must not reuse an earlier output file as the current result. Existing complete bundled records remain compatible; integrations relying on implicit completion or missing required decision fields must update their lane producers before adoption.
+
+The coordinator uses these decision fields:
 
 - `supports_core_claim`: `yes`, `partial`, `unknown`, `no`, `contradiction`, or `unsupported`.
 - `supports_requested_action_size`: `yes`, `partial`, `unknown`, `no`, or `unsupported`. `no` and `unsupported` reject the current requested action size; `partial` and `unknown` reduce eligibility to a smaller test action under ordinary policy.
@@ -76,3 +81,7 @@ The coordinator is intentionally permissive. It uses these fields when present:
 - `repeat_or_top_up_support`: `fresh_reason_present`, `weak`, `none`, or `not_applicable`.
 
 Unknown top-level fields are preserved in the coordinator's `lane_details` output but do not affect deterministic rules.
+
+For repeat actions, only `fresh_reason_present` supplies affirmative support. Omitted support, `not_applicable`, `weak`, and `none` leave the recommended amount at zero. Support is read from a completed evidence lane, falling back to a completed external-context lane only if evidence omits that field. A first action does not require repeat support.
+
+Completion records that a review occurred; it does not establish that every operator minimum was met. Domain-specific mandatory checks can use existing `required_lanes` entries: keep a required check `missing` or `error` while unavailable, and emit a configured hard blocker when a completed check establishes that an operator condition is unmet. Unknown linkage is not a universal identity requirement in this generic coordinator. The calling review must explicitly represent any stricter operator requirement; unrelated positive fields cannot substitute for it.
