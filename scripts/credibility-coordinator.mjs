@@ -274,14 +274,6 @@ function normalizeLane(laneType, raw) {
     decision: raw?.decision && typeof raw.decision === "object" ? raw.decision : {},
     limitations: asArray(raw?.limitations),
   };
-  if (["missing", "error"].includes(status)) {
-    lane.findings.push({
-      code: status === "missing" ? "LANE_MISSING" : "LANE_ERROR",
-      severity: "medium",
-      summary: `${lane.lane_type} lane status is ${status}.`,
-      evidence_refs: [],
-    });
-  }
   lane.highest_severity = highestSeverity(lane.findings);
   return lane;
 }
@@ -317,7 +309,7 @@ function missingLanes(policy, lanes) {
 function collectSignals(policy, lanes) {
   const signals = [];
   const hardCodes = new Set(asArray(policy.hard_blocker_codes));
-  const allFindings = lanes.filter((lane) => lane.status === "completed").flatMap((lane) =>
+  const allFindings = lanes.flatMap((lane) =>
     lane.findings.map((finding) => ({ ...finding, lane_type: lane.lane_type })));
   const highFindings = allFindings.filter((finding) => severityRank(finding.severity) >= SEVERITY_RANK.high);
   const criticalFindings = allFindings.filter((finding) => severityRank(finding.severity) >= SEVERITY_RANK.critical);

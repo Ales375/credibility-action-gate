@@ -543,7 +543,7 @@ for (const cap of [undefined, null, 0, -1, "bad"]) {
 for (const status of ["error", "missing", "not_applicable"]) {
   test(`optional ${status} source does not convert failed access into adverse evidence`, () => {
     const result = runCase({ policy: basePolicy(), lanes: { evidence: cleanEvidence, external_context: cleanExternal, graph_history: cleanGraph,
-      optional_social: { status, findings: [{ severity: "high", code: "STALE" }], decision: { supports_requested_action_size: "unsupported" } },
+      optional_social: { status, decision: { supports_requested_action_size: "unsupported" } },
     } });
     assert.equal(result.maximum_recommended_size, 5);
     assert.equal(result.reasons.length, 0);
@@ -555,6 +555,14 @@ test("required unavailable source still blocks despite positive completed review
     evidence: cleanEvidence, external_context: cleanExternal, graph_history: cleanGraph, optional_social: { status: "error" },
   } });
   assert.equal(result.maximum_recommended_size, 0);
+});
+
+test("explicit adverse finding survives an optional incomplete review", () => {
+  const result = runCase({ policy: basePolicy(), lanes: { evidence: cleanEvidence, external_context: cleanExternal, graph_history: cleanGraph,
+    optional_social: { status: "error", findings: [{ severity: "high", code: "ADVERSE_FACT", summary: "An independently established adverse finding predates failed access." }] },
+  } });
+  assert.equal(result.maximum_recommended_size, 0);
+  assert(result.reasons.some(reason => reason.refs.includes("optional_social:ADVERSE_FACT")));
 });
 
 if (process.exitCode) process.exit(process.exitCode);

@@ -102,4 +102,4 @@ Completed reviewers may report `confidence` as `high`, `medium`, `low`, `unknown
 
 No rule requires formal identity documents, payment, additional evidence purchases or human escalation. Use proportionate available evidence and operator policy; an inaccessible optional source alone is not an adverse fact.
 
-Only completed lanes supply findings and decision assertions to the semantic rules. Incomplete optional lanes remain visible in `lane_details` as limitations; unavailable access is not an adverse claim. An incomplete required lane still blocks through the required-lane check. Stale decisions retained in an errored lane cannot support or reject the current action.
+Only completed lanes supply decision assertions to the semantic rules. Incomplete optional lanes remain visible in `lane_details` as limitations; unavailable access no longer synthesizes a medium finding. Explicitly reported material findings are still considered even when a lane could not finish. An incomplete required lane still blocks through the required-lane check. Stale decision fields retained in an errored lane cannot support or reject the current action.
