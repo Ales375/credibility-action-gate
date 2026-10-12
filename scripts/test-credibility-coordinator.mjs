@@ -540,4 +540,21 @@ for (const cap of [undefined, null, 0, -1, "bad"]) {
   });
 }
 
+for (const status of ["error", "missing", "not_applicable"]) {
+  test(`optional ${status} source does not convert failed access into adverse evidence`, () => {
+    const result = runCase({ policy: basePolicy(), lanes: { evidence: cleanEvidence, external_context: cleanExternal, graph_history: cleanGraph,
+      optional_social: { status, findings: [{ severity: "high", code: "STALE" }], decision: { supports_requested_action_size: "unsupported" } },
+    } });
+    assert.equal(result.maximum_recommended_size, 5);
+    assert.equal(result.reasons.length, 0);
+    assert.equal(result.lane_details.find(lane => lane.lane_type === "optional_social").status, status);
+  });
+}
+test("required unavailable source still blocks despite positive completed reviews", () => {
+  const result = runCase({ policy: basePolicy({ required_lanes: ["evidence", "external_context", "optional_social"], disposition_preferences: { uncertainty_action: "small_test" } }), lanes: {
+    evidence: cleanEvidence, external_context: cleanExternal, graph_history: cleanGraph, optional_social: { status: "error" },
+  } });
+  assert.equal(result.maximum_recommended_size, 0);
+});
+
 if (process.exitCode) process.exit(process.exitCode);

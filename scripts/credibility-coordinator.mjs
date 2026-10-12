@@ -317,7 +317,7 @@ function missingLanes(policy, lanes) {
 function collectSignals(policy, lanes) {
   const signals = [];
   const hardCodes = new Set(asArray(policy.hard_blocker_codes));
-  const allFindings = lanes.flatMap((lane) =>
+  const allFindings = lanes.filter((lane) => lane.status === "completed").flatMap((lane) =>
     lane.findings.map((finding) => ({ ...finding, lane_type: lane.lane_type })));
   const highFindings = allFindings.filter((finding) => severityRank(finding.severity) >= SEVERITY_RANK.high);
   const criticalFindings = allFindings.filter((finding) => severityRank(finding.severity) >= SEVERITY_RANK.critical);
@@ -332,12 +332,13 @@ function collectSignals(policy, lanes) {
     ? evidence.repeat_or_top_up_support
     : map.get("external_context")?.status === "completed" ? external.repeat_or_top_up_support : undefined;
   const actionSizeSupport = lanes
-    .filter((lane) => Object.prototype.hasOwnProperty.call(lane.decision, "supports_requested_action_size"))
+    .filter((lane) => lane.status === "completed" && Object.prototype.hasOwnProperty.call(lane.decision, "supports_requested_action_size"))
     .map((lane) => ({
       lane_type: lane.lane_type,
       value: String(lane.decision.supports_requested_action_size ?? "unknown"),
     }));
-  const sourceIndependence = String(external.source_independence ?? "not_applicable");
+  const sourceIndependence = map.get("external_context")?.status === "completed"
+    ? String(external.source_independence ?? "not_applicable") : "not_applicable";
 
   if (hardBlockerFindings.length > 0) {
     signals.push({
