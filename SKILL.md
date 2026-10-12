@@ -15,7 +15,7 @@ This skill does not decide what the agent values. It decides whether the current
 
 1. Define the contemplated action and operator policy.
    - Use `references/policy-template.json` as the starting shape.
-   - The policy owns mission priorities, authority limits, repeat-action rules, and hard blockers.
+   - The policy owns mission priorities, authority limits, repeat-action rules, and hard blockers. Material uncertainty waits by default; only explicit `disposition_preferences.uncertainty_action: "small_test"` permits a bounded uncertain action within existing size limits. This never waives required checks or contradictions.
    - Do not place persona, voice, or domain-specific preferences in the core coordinator.
 
 2. Gather independent review lanes as JSON records.

@@ -135,7 +135,7 @@ test("multiple medium concerns shrink to small test action", () => {
     findings: [{ code: "SOURCE_INDEPENDENCE_WEAK", severity: "medium", summary: "Independent sources weak." }],
     decision: { ...cleanExternal.decision, source_independence: "weak" },
   };
-  const result = runCase({ policy: basePolicy(), lanes: { evidence, external_context: external, graph_history: cleanGraph } });
+  const result = runCase({ policy: basePolicy({ disposition_preferences: { uncertainty_action: "small_test" } }), lanes: { evidence, external_context: external, graph_history: cleanGraph } });
   assert.equal(result.disposition, "eligible_for_small_test_action");
   assert.equal(result.maximum_recommended_size, 1);
 });
@@ -179,7 +179,7 @@ test("partially supported requested action size shrinks to small test action", (
     ...cleanEvidence,
     decision: { ...cleanEvidence.decision, supports_requested_action_size: "partial" },
   };
-  const result = runCase({ policy: basePolicy(), lanes: { evidence, external_context: cleanExternal, graph_history: cleanGraph } });
+  const result = runCase({ policy: basePolicy({ disposition_preferences: { uncertainty_action: "small_test" } }), lanes: { evidence, external_context: cleanExternal, graph_history: cleanGraph } });
   assert.equal(result.disposition, "eligible_for_small_test_action");
   assert.equal(result.maximum_recommended_size, 1);
 });
@@ -368,7 +368,7 @@ test("successful output replaces prior result and creates nested directory", () 
   assert.equal(c.run(out).status, 0);
   const result = JSON.parse(fs.readFileSync(out));
   assert.equal(result.maximum_recommended_size, 5);
-  assert.equal(result.review_version, "0.2.0");
+  assert.equal(result.review_version, "0.3.0");
   assert.deepEqual(fs.readdirSync(path.dirname(out)), ["result.json"]);
 });
 
@@ -421,6 +421,107 @@ test("exclusive-create collision preserves the unowned temporary file", () => {
   const temporary = fs.readdirSync(c.dir).filter(name => name.endsWith(".tmp"));
   assert.equal(temporary.length, 1);
   assert.equal(fs.readFileSync(path.join(c.dir, temporary[0]), "utf8"), "pre-existing unrelated data");
+});
+
+function supportCase(decision = {}, preferences = {}, extra = {}) {
+  return runCase({ policy: basePolicy({ disposition_preferences: preferences, ...extra }), lanes: {
+    evidence: { ...cleanEvidence, decision: { ...cleanEvidence.decision, ...decision } },
+    external_context: cleanExternal, graph_history: cleanGraph,
+  } });
+}
+
+test("Issue 113 unknown support cannot yield full action or high confidence", () => {
+  const result = runCase({ policy: basePolicy({ requested_action: { size: 3, is_repeat_action: false } }), lanes: {
+    evidence: { ...cleanEvidence, decision: { ...cleanEvidence.decision, supports_core_claim: "unknown", claimant_linkage: "unknown" } },
+    external_context: { ...cleanExternal, decision: { public_context_plausibility: "not_found", source_independence: "not_applicable" } },
+  } });
+  assert.equal(result.maximum_recommended_size, 0);
+  assert(result.reasons.length > 0);
+  assert.notEqual(result.confidence, "medium_to_high");
+});
+
+for (const field of ["supports_core_claim", "claimant_linkage", "supports_requested_action_size"]) {
+  for (const value of ["unknown", "partial"]) {
+    test(`${field} ${value} waits unless bounded uncertainty is explicit`, () => {
+      const waiting = supportCase({ [field]: value });
+      assert.equal(waiting.maximum_recommended_size, 0);
+      const bounded = supportCase({ [field]: value }, { uncertainty_action: "small_test" });
+      assert.equal(bounded.disposition, "eligible_for_small_test_action");
+      assert.equal(bounded.maximum_recommended_size, 1);
+      assert.equal(bounded.confidence, "low_to_medium");
+      assert(bounded.reasons.length > 0);
+    });
+  }
+}
+for (const value of ["no", "unsupported", "contradiction"]) {
+  test(`negative core ${value} cannot be rescued by context or preferences`, () => {
+    const result = supportCase({ supports_core_claim: value }, {
+      uncertainty_action: "small_test", reject_on_any_high: false, reject_on_any_critical: false,
+    });
+    assert.equal(result.maximum_recommended_size, 0);
+    assert.equal(result.disposition, "reject_current_record");
+  });
+}
+test("contradicted linkage cannot be rescued by uncertainty permission", () => {
+  assert.equal(supportCase({ claimant_linkage: "contradicted" }, { uncertainty_action: "small_test", reject_on_any_high: false }).maximum_recommended_size, 0);
+});
+for (const confidence of [undefined, null, "unknown", "low"]) {
+  test(`review confidence ${confidence} cannot silently increase eligibility`, () => {
+    const lanes = { evidence: { ...cleanEvidence, confidence }, external_context: cleanExternal, graph_history: cleanGraph };
+    const result = runCase({ policy: basePolicy(), lanes });
+    assert.equal(result.maximum_recommended_size, 0);
+    assert.notEqual(result.confidence, "medium_to_high");
+    assert.equal(runCase({ policy: basePolicy({ disposition_preferences: { uncertainty_action: "small_test" } }), lanes }).maximum_recommended_size, 1);
+  });
+}
+test("invalid uncertainty preference is rejected", () => {
+  runCaseExpectError({ policy: basePolicy({ disposition_preferences: { uncertainty_action: "full" } }), lanes: { evidence: cleanEvidence, external_context: cleanExternal } });
+});
+test("uncertainty permission cannot bypass required lane or fresh repeat support", () => {
+  const prefs = { uncertainty_action: "small_test" };
+  assert.equal(runCase({ policy: basePolicy({ disposition_preferences: prefs }), lanes: { evidence: cleanEvidence, external_context: cleanExternal } }).maximum_recommended_size, 0);
+  assert.equal(supportCase({ supports_core_claim: "unknown" }, prefs, { requested_action: { size: 5, is_repeat_action: true } }).maximum_recommended_size, 0);
+});
+
+test("fully supported high-confidence action remains eligible", () => {
+  const result = runCase({ policy: basePolicy(), lanes: { evidence: cleanEvidence, external_context: cleanExternal,
+    graph_history: { ...cleanGraph, confidence: "high" } } });
+  assert.equal(result.disposition, "eligible_for_full_policy_action");
+  assert.equal(result.confidence, "medium_to_high");
+  assert.equal(result.policy.uncertainty_action, "monitor");
+});
+test("legacy small-test preference does not implicitly authorize uncertainty", () => {
+  assert.equal(supportCase({ claimant_linkage: "partial" }, { multiple_medium_concerns: "eligible_for_small_test_action" }).maximum_recommended_size, 0);
+});
+test("explicit uncertainty stays within all existing size caps", () => {
+  const result = supportCase({ supports_core_claim: "partial" }, { uncertainty_action: "small_test" }, {
+    requested_action: { size: 0.5, is_repeat_action: false },
+    authority: { max_autonomous_action_size: 0.75, small_test_action_size: 1, serious_action_threshold: 5 },
+  });
+  assert.equal(result.maximum_recommended_size, 0.5);
+});
+test("fresh repeat may use explicit bounded uncertainty but not override a policy blocker", () => {
+  const decision = { supports_core_claim: "partial", repeat_or_top_up_support: "fresh_reason_present" };
+  assert.equal(supportCase(decision, { uncertainty_action: "small_test" }, { requested_action: { size: 5, is_repeat_action: true } }).maximum_recommended_size, 1);
+  const result = runCase({ policy: basePolicy({ disposition_preferences: { uncertainty_action: "small_test" } }), lanes: {
+    evidence: { ...cleanEvidence, decision: { ...cleanEvidence.decision, ...decision }, findings: [{ code: "DOMAIN_HARD_BLOCKER", severity: "info" }] },
+    external_context: cleanExternal, graph_history: cleanGraph,
+  } });
+  assert.equal(result.maximum_recommended_size, 0);
+});
+test("contradiction in another completed lane is not masked by positive evidence", () => {
+  const result = runCase({ policy: basePolicy(), lanes: { evidence: cleanEvidence, external_context: {
+    ...cleanExternal, decision: { ...cleanExternal.decision, claimant_linkage: "contradicted" } }, graph_history: cleanGraph } });
+  assert.equal(result.disposition, "reject_current_record");
+});
+test("invalid reviewer confidence is rejected", () => {
+  runCaseExpectError({ policy: basePolicy(), lanes: { evidence: { ...cleanEvidence, confidence: "certain" } } });
+});
+test("uncertainty opt-in does not permit high findings when rejection preference is disabled", () => {
+  const result = runCase({ policy: basePolicy({ disposition_preferences: { uncertainty_action: "small_test", reject_on_any_high: false } }), lanes: {
+    evidence: { ...cleanEvidence, findings: [{ severity: "high", code: "ADVERSE" }] }, external_context: cleanExternal, graph_history: cleanGraph,
+  } });
+  assert.equal(result.maximum_recommended_size, 0);
 });
 
 if (process.exitCode) process.exit(process.exitCode);
