@@ -22,7 +22,7 @@ Failed lookups, inaccessible social sites, privacy redactions, quick cash-out, a
 
 For repeats or top-ups, record an affirmative current marginal reason and why it supports this additional action under operator policy. Prior eligibility alone is not a fresh rationale. The coordinator requires `fresh_reason_present` from a completed evidence or external-context lane; a reviewer must substantiate that value rather than infer it from a previous donation.
 
-Treat every reassessment as a new decision. If a fetch, parser, or required review fails, pass its current lane as `missing` or `error` and discard any earlier eligible disposition for this run. Unchanged public metadata or cached material can preserve prior observations, but cannot manufacture a new repeat reason. If the proposed recipient wallet changes, reopen payment-route and claimant-linkage checks against the current destination before any action; an earlier link to another wallet is stale.
+Treat every reassessment as a new decision. If a required review cannot be completed, pass its current lane as `missing` or `error` and discard any earlier eligible disposition for this run. Unchanged public metadata or cached material can preserve prior observations, but cannot manufacture a new repeat reason. If the proposed recipient wallet actually changes, reopen payment-route and claimant-linkage checks against the current destination before any action; an earlier link to another wallet is stale. A letter-case change of the same EVM address alone is not a new destination.
 
 ## Cross-campaign context
 

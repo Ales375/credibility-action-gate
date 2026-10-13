@@ -11,4 +11,4 @@ Use the adapter with synthetic records and read-only tool stubs. No payment, reg
 
 Use the [canonical evidence/reassessment scenarios](https://github.com/Ales375/zooidfund-skill/blob/main/tests/evidence-review-scenarios.md) for access state, paid review budgets and discovery mechanics. These evaluations do not prove that a deployed agent follows the guidance.
 
-The executable synthetic decisions in `scripts/test-learned-assessment.mjs` exercise the coordinator for current linkage, unreadable content, repeat support, changed payment route, failed reassessment and unavailable optional sources. Deployment-specific amount and topic policy stays outside this general adapter.
+For a genuine forward evaluation, give a reviewer the adapter and raw synthetic campaign facts with read-only tool outcomes. Check which records it would inspect, which required checks remain open, and whether it proposes action or waits. The coordinator suite verifies decisions after lane normalization; it does not establish that an agent produced those lanes correctly. Deployment-specific amount and topic policy stays outside this general adapter.
