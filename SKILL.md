@@ -3,7 +3,7 @@ name: credibility-action-gate
 description: Use when an agent needs to evaluate messy public claims before taking a bounded, costly, irreversible, or reputation-sensitive action. Produces an analysis-only action disposition from evidence, public context, history, and operator policy without deciding the agent's mission or executing the action.
 license: MIT-0
 metadata:
-  version: "2.0.0"
+  version: "2.0.1"
   source: "https://github.com/Ales375/credibility-action-gate"
 ---
 

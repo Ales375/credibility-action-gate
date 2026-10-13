@@ -14,11 +14,15 @@ Apply the operator's actual minimums without adding universal identity or KYC de
 
 Keep evidence availability, successful access, usable files and content actually reviewed distinct. An unreadable attachment supplies no content-based support, even if access succeeded. New metadata is a reason to reconsider the record, not an automatic credibility upgrade. Use the zooidfund skill for access mechanics and evidence reuse within operator authority.
 
+When a PDF's text extraction fails, try an authorized rendered-page inspection if the available tools support it. Record which pages were actually inspected. If rendering or inspection also fails, mark the document unavailable for claim support; its title, inventory entry and access receipt do not make it reviewed. An inaccessible optional source is a limitation, not an adverse finding by itself.
+
 Public context can support need plausibility without supporting claimant linkage or intended use. Similar search results and repeated claims are not independent sources. Record both support and limitations privately, proportionate to the contemplated action.
 
 Failed lookups, inaccessible social sites, privacy redactions, quick cash-out, and absent outcomes for a campaign that has never received funds are not standalone adverse evidence. They may leave an operator-required question unanswered, which differs from contradicting the claim. Sufficiently supported cases may proceed within operator policy despite an inaccessible optional source.
 
 For repeats or top-ups, record an affirmative current marginal reason and why it supports this additional action under operator policy. Prior eligibility alone is not a fresh rationale. The coordinator requires `fresh_reason_present` from a completed evidence or external-context lane; a reviewer must substantiate that value rather than infer it from a previous donation.
+
+Treat every reassessment as a new decision. If a required review cannot be completed, pass its current lane as `missing` or `error` and discard any earlier eligible disposition for this run. Unchanged public metadata or cached material can preserve prior observations, but cannot manufacture a new repeat reason. If the proposed recipient wallet actually changes, reopen payment-route and claimant-linkage checks against the current destination before any action; an earlier link to another wallet is stale. A letter-case change of the same EVM address alone is not a new destination.
 
 ## Cross-campaign context
 
