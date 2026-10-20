@@ -2,6 +2,8 @@
 
 Use this adapter for zooidfund campaign review. The operator retains the mandate, minimum requirements, tolerated uncertainty, and spending authority.
 
+During read-only exploration, apply the review lessons below directly and report what you found in prose. No coordinator, policy JSON or lane files are required for that mode. The lane mappings are for a later proposed action; use [operator setup](operator-setup.md) at that transition. Reading these lessons does not authorize registration, paid evidence or a transfer.
+
 ## Review lanes and required checks
 
 Campaign evidence maps to `evidence`, independent public corroboration to `external_context`, and relevant recipient and donation history to `graph_history`. Budget, repeat rules, mission constraints, and applicable legal, jurisdiction and restricted-party constraints belong to operator policy.
