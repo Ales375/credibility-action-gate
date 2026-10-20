@@ -1,6 +1,6 @@
 ---
 name: credibility-action-gate
-description: Review uncertain public claims during read-only exploration, then gate a proposed costly, irreversible, or reputation-sensitive action under operator policy. Uses evidence, public context and history without deciding the operator's mission or executing the action.
+description: Review uncertain claims during read-only exploration, then gate a proposed costly or irreversible action under operator policy. Does not choose the mission or execute the action.
 license: MIT-0
 metadata:
   version: "2.0.2"
