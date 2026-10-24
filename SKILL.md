@@ -3,7 +3,7 @@ name: credibility-action-gate
 description: Review uncertain claims during read-only exploration, then gate a proposed costly or irreversible action under operator policy. Does not choose the mission or execute the action.
 license: MIT-0
 metadata:
-  version: "2.0.2"
+  version: "2.0.3"
   source: "https://github.com/Ales375/credibility-action-gate"
 ---
 
