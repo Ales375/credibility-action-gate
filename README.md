@@ -22,23 +22,23 @@ reviewing the repository.
 
 ## Explore before configuring an action
 
-For read-only exploration, tell the agent your priorities and ask it to review the public record. It can use the assessment lessons in the zooidfund adapter without a wallet, registration, policy JSON or coordinator run. It should explain support, uncertainty and further checks, rather than manufacture an action disposition.
+For zooidfund read-only exploration, start with a broad campaign overview and up to five worth considering or none. Apply an existing mandate or stated preferences when present, and refine if asked; no priorities questionnaire is required. It can use the assessment lessons in the zooidfund adapter without a wallet, registration, policy JSON or coordinator run. It should explain support, uncertainty and further checks, rather than manufacture an action disposition.
 
 When you later ask for a proposed donation or automation, the agent asks the missing policy questions in plain language and prepares compatible policy and review files using [operator setup](references/operator-setup.md). You review the actual limits; you do not need to author JSON. Exploration and a proposed donation do not grant spending authority.
 
 ## Claude app installation
 
-Download [credibility-action-gate 2.0.3 for Claude](https://github.com/Ales375/credibility-action-gate/releases/download/v2.0.3/credibility-action-gate-2.0.3.zip). For zooidfund exploration, also download [zooidfund 1.9.4 for Claude](https://github.com/Ales375/zooidfund-skill/releases/download/v1.9.4/zooidfund-1.9.4.zip). Use the complete packages, not GitHub's source ZIP or a lone Markdown file. You do not need to clone, build or test the repositories. If a download is unavailable, stop setup and report the missing asset; do not substitute an older version or manual assessment guidance.
+Download the official complete [credibility-action-gate 2.0.4 ZIP](https://github.com/Ales375/credibility-action-gate/releases/download/v2.0.4/credibility-action-gate-2.0.4.zip). It contains one `credibility-action-gate/` folder with the instructions, coordinator and supporting files. Inspect it for material concerns; installation does not require cloning, rebuilding or running tests. Do not substitute GitHub's source ZIP or a lone Markdown file. If the official download is unavailable, stop setup and report it.
 
-In Claude, open Customize > Skills > + > Create skill > Upload a skill, upload each ZIP, then enable both skills. Reuse existing settings and connectors. Settings > Capabilities must allow code execution/file creation (also labeled Create and edit files); organization controls may require an administrator. Use a normal chat for the later file/coordinator stage; Incognito does not support that stage. The gate ZIP contains one `credibility-action-gate/` folder with instructions, references, coordinator, examples and tests. See [Claude's package instructions](https://support.claude.com/en/articles/12512198-how-to-create-custom-skills) and [installation instructions](https://support.claude.com/en/articles/12512180-use-skills-in-claude). This two-skill setup is specific to the guided Claude journey; existing Hermes/OpenClaw installations and MCP-only public exploration retain their supported routes and stricter local controls.
+Use the [operator guide](https://zooid.fund/donor-agents) for the maintained Claude onboarding prompt, zooidfund download and current upload/connector steps. Uploaded artifacts or a connector alone are not installed skills usable in a conversation. Existing Hermes/OpenClaw installations and MCP-only public browsing retain their supported routes and stricter controls.
 
-For maintainers reproducing a release, verify that tag `v2.0.3` resolves to the manifest's exact `source_commit`, then archive that tag:
+For maintainers reproducing this release, first check that `v2.0.4` resolves to the manifest's exact source commit:
 
 ```sh
-git -c core.autocrlf=false archive --format=zip --prefix=credibility-action-gate/ --output=credibility-action-gate-2.0.3.zip v2.0.3 SKILL.md README.md LICENSE scripts references examples agents
+git -c core.autocrlf=false archive --format=zip --prefix=credibility-action-gate/ --output=credibility-action-gate-2.0.4.zip v2.0.4 SKILL.md README.md LICENSE scripts references examples agents
 ```
 
-The release tag must point to the exact reviewed source commit used for the ZIP, not a later merge/squash commit. The archive's commit comment, manifest `source_commit`, tag target and ZIP SHA-256 must agree. Publish the ZIP with `credibility-action-gate-2.0.3.manifest.json`. The repository's Releases page is authoritative for available downloads. Publish and anonymously verify both packages before merging README or website changes that advertise them. The deterministic gate needs Node.js; check that capability when a proposed action reaches the gate, rather than blocking read-only exploration on it.
+Publish the ZIP with `credibility-action-gate-2.0.4.manifest.json`. The tag target, archive commit comment and manifest source must name the same reviewed commit, not a later merge/squash commit; verify the ZIP hash. Releases is authoritative for available downloads. Publish and anonymously verify both packages before merging README/site changes that advertise them. Node.js is needed for the later proposed-action coordinator run, not for read-only exploration.
 
 ## How the action gate works
 

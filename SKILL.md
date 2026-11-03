@@ -3,7 +3,7 @@ name: credibility-action-gate
 description: Review uncertain claims during read-only exploration, then gate a proposed costly or irreversible action under operator policy. Does not choose the mission or execute the action.
 license: MIT-0
 metadata:
-  version: "2.0.3"
+  version: "2.0.4"
   source: "https://github.com/Ales375/credibility-action-gate"
 ---
 
@@ -17,7 +17,7 @@ This skill does not decide what the agent values. It decides whether the current
 
 ## Start with the requested mode
 
-**Read-only exploration.** Ask about the operator's interests and relevant constraints if they are unknown, then investigate within the requested read-only scope. No wallet, registration, spending policy JSON, review-lane files or coordinator run is needed. Use the source-independence, inspected-document, claimant-linkage, reassessment and repeat-support lessons in [the zooidfund review adapter](references/zooidfund_adapter.md) when exploring zooidfund. Distinguish observations, support, contradictions and unanswered questions in ordinary prose. A shortlist is a proposal for further consideration, not an action disposition or permission to spend.
+**Read-only exploration.** Investigate within the requested read-only scope, applying an existing mandate or stated preferences when present. For zooidfund, start with a broad overview and up to five campaigns worth considering or none; refine if asked rather than requiring a priorities questionnaire. No wallet, registration, spending policy JSON, review-lane files or coordinator run is needed. Use the source-independence, inspected-document, claimant-linkage, reassessment and repeat-support lessons in [the zooidfund review adapter](references/zooidfund_adapter.md) when exploring zooidfund. Distinguish observations, support, contradictions and unanswered questions in ordinary prose. A shortlist is a proposal for further consideration, not an action disposition or permission to spend.
 
 **Proposed action or automation.** When the operator asks to consider a concrete action or scheduled execution, follow [operator setup](references/operator-setup.md). Ask for missing policy decisions in plain language, prepare the existing compatible JSON files yourself, and summarize their actual limits for approval. Do not invent answers or treat exploration priorities, a requested proposal, or example policy values as spending authority. If an established operator mandate already requires this gate, preserve that requirement.
 
