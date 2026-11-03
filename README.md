@@ -28,17 +28,17 @@ When you later ask for a proposed donation or automation, the agent asks the mis
 
 ## Claude app installation
 
-Use a complete `credibility-action-gate-2.0.2.zip` prepared from this candidate, rather than uploading `SKILL.md` alone. The ZIP contains one `credibility-action-gate/` folder with the instructions, references, coordinator, examples and test command. Version 2.0.2 is a candidate until separately released; this repository does not imply that a release download already exists.
+Download [credibility-action-gate 2.0.3 for Claude](https://github.com/Ales375/credibility-action-gate/releases/download/v2.0.3/credibility-action-gate-2.0.3.zip). For zooidfund exploration, also download [zooidfund 1.9.4 for Claude](https://github.com/Ales375/zooidfund-skill/releases/download/v1.9.4/zooidfund-1.9.4.zip). Use the complete packages, not GitHub's source ZIP or a lone Markdown file. You do not need to clone, build or test the repositories. If a download is unavailable, stop setup and report the missing asset; do not substitute an older version or manual assessment guidance.
 
-Ask your agent to prepare that package from the reviewed repository commit and give you the ZIP. In Claude, enable Code execution and file creation under Settings > Capabilities, then open Customize > Skills, Add skill, and upload the ZIP. Enable the skill. Team or Enterprise account controls may require an administrator. These unavoidable account settings are yours to approve; the agent handles package and technical-file preparation. See [Claude's package instructions](https://support.claude.com/en/articles/12512198-how-to-create-custom-skills) and [installation instructions](https://support.claude.com/en/articles/12512180-use-skills-in-claude).
+In Claude, open Customize > Skills > + > Create skill > Upload a skill, upload each ZIP, then enable both skills. Reuse existing settings and connectors. Settings > Capabilities must allow code execution/file creation (also labeled Create and edit files); organization controls may require an administrator. Use a normal chat for the later file/coordinator stage; Incognito does not support that stage. The gate ZIP contains one `credibility-action-gate/` folder with instructions, references, coordinator, examples and tests. See [Claude's package instructions](https://support.claude.com/en/articles/12512198-how-to-create-custom-skills) and [installation instructions](https://support.claude.com/en/articles/12512180-use-skills-in-claude). This two-skill setup is specific to the guided Claude journey; existing Hermes/OpenClaw installations and MCP-only public exploration retain their supported routes and stricter local controls.
 
-To reproduce the complete package from the intended commit, the agent runs:
+For maintainers reproducing a release, verify that tag `v2.0.3` resolves to the manifest's exact `source_commit`, then archive that tag:
 
 ```sh
-git archive --format=zip --prefix=credibility-action-gate/ --output=credibility-action-gate-2.0.2.zip HEAD SKILL.md README.md LICENSE scripts references examples agents
+git -c core.autocrlf=false archive --format=zip --prefix=credibility-action-gate/ --output=credibility-action-gate-2.0.3.zip v2.0.3 SKILL.md README.md LICENSE scripts references examples agents
 ```
 
-The folder name matches the skill name. Keep the source commit and per-file hash manifest with the package. The deterministic gate needs Node.js; the agent checks that capability when a proposed action reaches the gate, rather than blocking read-only exploration on it.
+The release tag must point to the exact reviewed source commit used for the ZIP, not a later merge/squash commit. The archive's commit comment, manifest `source_commit`, tag target and ZIP SHA-256 must agree. Publish the ZIP with `credibility-action-gate-2.0.3.manifest.json`. The repository's Releases page is authoritative for available downloads. Publish and anonymously verify both packages before merging README or website changes that advertise them. The deterministic gate needs Node.js; check that capability when a proposed action reaches the gate, rather than blocking read-only exploration on it.
 
 ## How the action gate works
 
